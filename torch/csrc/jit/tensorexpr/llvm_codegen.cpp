@@ -804,7 +804,8 @@ void LLVMCodeGenImpl::visit(const Cast* v) {
     return;
   }
 
-  bool destUnsigned = v->dtype().scalar_type() == ScalarType::Byte;
+  bool destUnsigned = v->dtype().scalar_type() == ScalarType::Byte ||
+      v->dtype().scalar_type() == ScalarType::Bool;
 
   // Scalar casts
   if (srcType->isFPOrFPVectorTy()) {
@@ -826,7 +827,21 @@ void LLVMCodeGenImpl::visit(const Cast* v) {
       } else {
         value_ = irb_.CreateSIToFP(value_, dstType);
       }
+
     } else if (dstType->isIntOrIntVectorTy()) {
+      // Bool is represented as 8bits, we need to make sure
+      // we're appropriately setting the one bit that is used
+      if (v->dtype().scalar_type() == ScalarType::Bool) {
+        llvm::Constant* constant_zero = llvm::ConstantInt::get(srcType, 0);
+        if (v->src_value()->dtype().lanes() != 1) {
+          std::vector<llvm::Constant*> const_vector;
+          for (int i = 0; i < v->src_value()->dtype().lanes(); ++i) {
+            const_vector.push_back(constant_zero);
+          }
+          constant_zero = llvm::ConstantVector::get(const_vector);
+        }
+        value_ = irb_.CreateICmpNE(value_, constant_zero);
+      }
       value_ = irb_.CreateIntCast(value_, dstType, !destUnsigned);
     } else {
       throw unimplemented_lowering(v);
