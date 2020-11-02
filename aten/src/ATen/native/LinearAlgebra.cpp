@@ -186,6 +186,72 @@ Tensor ger(const Tensor& self, const Tensor& vec2) {
   return self.outer(vec2);
 }
 
+Tensor& inner_out(Tensor& out, const Tensor& self, const Tensor& other) {
+  checkDeviceType("inner()", {out, self, other}, self.device().type());
+
+  // If either self or other is a scalar just multiply them
+  if (self.dim() == 0 || other.dim() == 0) {
+    resize_output(out, self.dim() == 0 ? other.sizes() : self.sizes());
+    at::mul_out(out, self, other);
+    return out;
+  }
+
+  // Last dimension should match
+  TORCH_CHECK(
+      self.size(-1) == other.size(-1),
+      "inner() the last dimension must match on both input tensors but got shapes ",
+      self.sizes(),
+      " and ",
+      other.sizes());
+
+  // out_shape = self_shape[:-1] + other_shape[:-1]
+  std::vector<int64_t> shape(
+      self.sizes().begin(), self.sizes().begin() + self.dim() - 1);
+  shape.insert(
+      shape.end(),
+      other.sizes().begin(),
+      other.sizes().begin() + other.dim() - 1);
+  at::native::resize_output(out, shape);
+
+  // Reshape self to include dimensions other_shape[:-1] so it broadcasts with other in
+  // torch.mul resulting in the correct out_shape after summing last dimension
+  std::vector<int64_t> sizes = self.sizes().vec();
+  sizes.insert(sizes.begin() + self.dim() - 1, other.dim() - 1, 1);
+  Tensor input = self.reshape(sizes);
+
+  // Compute result
+  at::sum_out(out, input * other, -1);
+
+  return out;
+}
+
+Tensor inner(const Tensor& self, const Tensor& other) {
+  checkDeviceType("inner()", {self, other}, self.device().type());
+
+  // If either self or other is a scalar just multiply them
+  if (self.dim() == 0 || other.dim() == 0) {
+    return self * other;
+  }
+
+  // Last dimension should match
+  TORCH_CHECK(
+      self.size(-1) == other.size(-1),
+      "inner() the last dimension must match on both input tensors but got shapes ",
+      self.sizes(),
+      " and ",
+      other.sizes());
+
+  // out_shape = self_shape[:-1] + other_shape[:-1]
+  // Reshape self to include dimensions other_shape[:-1] so it broadcasts with other in
+  // torch.mul resulting in the correct out_shape after summing last dimension
+  std::vector<int64_t> sizes = self.sizes().vec();
+  sizes.insert(sizes.begin() + self.dim() - 1, other.dim() - 1, 1);
+  Tensor input = self.reshape(sizes);
+
+  // Compute result
+  return (input * other).sum(-1);
+}
+
 Tensor& outer_out(Tensor &result, const Tensor& self, const Tensor& vec2) {
   check_1d(self, "self", "outer");
   check_1d(vec2, "vec2", "outer");
