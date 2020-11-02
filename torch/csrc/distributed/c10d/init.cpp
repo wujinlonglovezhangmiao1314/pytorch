@@ -1194,6 +1194,58 @@ Arguments:
 
 #undef PROCESS_GROUP_DEPRECATION_WARNING
 
+// NOTE: Below are TorchBind bindings for c10d, these bindings will
+// live together with those pybind11 bindings above until we resolve
+// all the TorchBind issues and merge these two together
+static auto StoreTorchBind = torch::class_<::c10d::Store>("dist_c10d", "Store");
+
+// Torchbind the ProcessGroup to make it available in TorchScript
+static auto ProcessGroupWorkTorchBind =
+    torch::class_<::c10d::ProcessGroup::Work>("dist_c10d", "Work")
+        .def(torch::init<>())
+        .def(
+            "wait",
+            [](const c10::intrusive_ptr<::c10d::ProcessGroup::Work>& work)
+                -> bool {
+              // TODO: make std::chrono::millisecond works with TorchBind to
+              // provide the full API in python
+              return work->wait();
+            })
+        .def("result", &::c10d::ProcessGroup::Work::result);
+
+static auto ProcessGroupTorchBind =
+    torch::class_<::c10d::ProcessGroup>("dist_c10d", "ProcessGroup");
+
+#ifdef USE_C10D_NCCL
+
+static auto ProcessGroupNCCLOptionsTorchBind =
+    torch::class_<::c10d::ProcessGroupNCCL::Options>(
+        "dist_c10d",
+        "ProcessGroupNCCL.Options");
+
+static auto ProcessGroupNCCLTorchBind =
+    torch::class_<::c10d::ProcessGroupNCCL>("dist_c10d", "ProcessGroupNCCL")
+        .def(torch::init<
+             const c10::intrusive_ptr<::c10d::Store>&,
+             int64_t,
+             int64_t,
+             const c10::intrusive_ptr<::c10d::ProcessGroupNCCL::Options>&>())
+        .def(
+            "alltoalll_base",
+            [](const c10::intrusive_ptr<::c10d::ProcessGroup>& pg,
+               at::Tensor output,
+               at::Tensor input,
+               std::vector<int64_t> outputSplitSizes,
+               std::vector<int64_t> inputSplitSizes) {
+              return pg->alltoall_base(
+                  output,
+                  input,
+                  outputSplitSizes,
+                  inputSplitSizes,
+                  ::c10d::AllToAllOptions());
+            });
+#endif
+
 } // namespace
 
 // c10d methods on torch._C

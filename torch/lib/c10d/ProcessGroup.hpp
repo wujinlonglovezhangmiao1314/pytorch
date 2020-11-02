@@ -10,6 +10,7 @@
 #include <ATen/ATen.h>
 
 #include <c10d/Types.hpp>
+#include <sys/types.h>
 
 // *************************************************************************
 // PROCESS GROUP collective communication API IS BEING CHANGED BETWEEN
@@ -68,7 +69,7 @@ bool isP2POp(OpType opType);
 // process group to find each other (referred to as rendezvous from
 // hereon)
 //
-class ProcessGroup {
+class ProcessGroup : public torch::CustomClassHolder{
  public:
   // Please do not use ProcessGroup::Work API, it is going away, to be
   // replaced by ivalue::Future.
